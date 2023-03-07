@@ -1,0 +1,276 @@
+---
+title: "Predicting Employee Retention Rate"
+output:
+  html_document:
+    df_print: paged
+  word_document: default
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, warning = FALSE, message = FALSE)
+```
+
+
+```{r}
+library(readr)
+Traind <- read_csv("~/HRRetention_train.txt")
+test <-read_csv("~/HRRetention_test.txt")
+```
+
+
+```{r}
+train=Traind
+test=test
+```
+
+# *Task One*
+## Checking for any missing values in both datasets
+
+### Train set
+```{r}
+sum(is.na(train))
+```
+** There are 20,743 missing values in the Train dataset
+
+### Test set
+
+```{r}
+sum(is.na(test))
+
+```
+** There are 2,204 missing values in the Test dataset.
+
+## Visualize the missing Values 
+### Using Tables
+### Train set
+```{r}
+head(train)
+colSums(is.na(train))
+```
+
+### Test set
+### Train set
+```{r}
+head(test)
+as.table(colSums(is.na(test)))
+```
+
+### Using charts 
+#### Train set 
+
+```{r}
+library(visdat)
+vis_miss(train)
+library(ggplot2)
+library(naniar)
+gg_miss_var(train)
+gg_miss_case(train)
+```
+
+
+** From the visualizations presented above, the train missing values in the train dataset is 7.7%. Besides, the majority of the missing values are in the "company_type" variables. The other variables that have missing values include;
+i. company_size
+ii. Gender
+iii. major_discipline
+iv. education_level
+v. last_new_job
+vi. enrolled_university 
+vii. experince and training hours.
+
+#### Test set
+```{r}
+library(visdat)
+vis_miss(test)
+library(ggplot2)
+library(naniar)
+gg_miss_var(test)
+gg_miss_case(test)
+```
+
+** The percentage of missing values in the test dataset is 8%. Similar to the train set, the variables with the missing values include;i. company_size and company_type
+ii. Gender
+iii. major_discipline
+iv. education_level
+v. last_new_job
+vi. enrolled_university 
+vii. experince and training hours.
+
+# *Task 2*
+
+## Imputation of missing Values 
+### Train Data
+```{r}
+library(dplyr)
+trainmean <-train %>%
+  mutate_all(~ifelse(is.na(.),mean(., na.rm=TRUE), .))
+
+trainmean
+```
+
+### Test Data
+
+```{r}
+testmean <-test %>%
+  mutate_all(~ifelse(is.na(.),mean(., na.rm=TRUE), .))
+
+testmean
+
+```
+
+## take only complete cases 
+```{r}
+Train <-na.omit(trainmean)
+
+Test <-na.omit(testmean)
+
+```
+
+# *Task 3*
+# Three Aglorithms
+
+## Random Forest Classification 
+
+### Initiate random forest model
+```{r}
+library(randomForest)
+set.seed(222)
+fit_rf <- randomForest(factor(target) ~ gender+relevent_experience+enrolled_university+
+                         education_level+major_discipline
+                       +experience+company_size+company_type
+                       +last_new_job+training_hours, data=Train)
+fit_rf
+
+print(fit_rf)
+attributes(fit_rf)
+
+
+```
+
+## Prediction 
+### Using Train set
+```{r}
+library(caret)
+randompredict1 <- predict(fit_rf,Train)
+head(randompredict1)
+head(Train$target)
+confusionMatrix(randompredict1,factor(Train$target))
+```
+
+### Using Test set
+```{r}
+Target <- predict(fit_rf,Test)
+predictedTest<-cbind(Test,Target)
+predict2 <-predict(fit_rf,predictedTest)
+confusionMatrix(predict2,predictedTest$Target)
+
+```
+
+### Plotting
+```{r}
+plot(fit_rf)
+
+```
+
+### Important Variables
+```{r}
+varImpPlot(fit_rf,
+           sort = T,
+           n.var = 5,
+           main = "Top 5 Important Variables for Prediction")
+```
+
+##      ***Accuracy of model 1 is 91.67%***
+
+## Logistic Regression Model
+
+```{r}
+logitmodel <-glm(factor(target) ~ relevent_experience+enrolled_university+
+      education_level+major_discipline
+    +experience+company_size
+    +last_new_job+training_hours, data=Train, family = 'binomial')
+
+summary(logitmodel)
+```
+
+## prediction 
+### using train set
+```{r}
+
+logitpred <-predict(logitmodel, Train, type = 'response')
+logpredd <- table(Train$target, logitpred >= 0.5)
+head(logitpred)
+head(Train)
+summary(logpredd)
+logpredd
+```
+
+### Finding accuracy level
+```{r}
+accuracy = (7442+42)/(7442+42+30+1441)
+accuracy
+```
+
+##      ***Accuracy of model 2 is 83.57%***
+
+## Decision Trees
+```{r}
+library(party)
+Dtrees <-ctree(as.factor(target)~training_hours+ factor(experience)
+               +factor(company_size)+factor(last_new_job)+factor(company_type)
+               +factor(education_level)+factor(major_discipline), data = Train)
+
+Dtrees
+plot(Dtrees)
+```
+
+## prune the tree 
+
+```{r}
+trees <-ctree(as.factor(target)~training_hours+ factor(experience)
+               +factor(company_size)+factor(last_new_job)+factor(company_type)
+               +factor(education_level)+factor(major_discipline), data = Train,
+               controls = ctree_control(mincriterion = 0.99,minsplit = 500))
+
+trees
+plot(trees)
+
+```
+
+### Prediction
+```{r}
+tag <-predict(trees,Test$target)
+
+```
+
+## misclassification error
+
+```{r}
+tab <-table(predict(trees), Train$target)
+print(tab)
+1-sum(diag(tab))/sum(tab)
+
+```
+
+
+## accuracylevel
+```{r}
+acc=(7472+0)/(7472+0+0+1483)
+acc
+accuray_level = 83.43
+accuray_level
+
+```
+
+##      ***Accuracy of model 3 is 83.43%***
+
+## *Task 4*
+
+**The most important predictors that can help determine the likelihood of an employee to the leave the company include; the level of experience, Education major discipline of candidate, and No of employees in current employer's company.**
+
+### *Conclusion*
+
+**From the examination of the three predictive models, employees with more experiences in the organization are more likely to pursue new employments. Employees with relevant experience depict a higher likelihood of seeking new job opportunities. Besides, those in the business, arts and humanities major are more likely to pursue new employment compared to those in STEM areas.**
+
+### *Recommendations*
+
+**The organization can use these predictions to identify a pattern and develop a proper strategy that can help in reducing employee turnover. One of the key measures that can be implemented by the organization to reduce the churn rate is by offering competitive salaries and benefits. Ideally, the organization should ensure that the highly talented and experienced employees are rewarded as required. Besides, the organization should strive to develop an involving and developing working environment. For example, the organization should ensure that the employees continuously feel positive challenged in their careers to increase their motivation and interest in remaining in the company. The organization should also allow flexible schedules especially for the employees who are enrolled in higher learning institutions. With flexible working hours, the organization can ensure that the employees are still able to contribute without posing a risk of burnout hence ultimately reducing the rate of turnover. **
